@@ -1,0 +1,595 @@
+Summary
+    BDMV/index.bdmv
+        The top-level table that defines the Titles and the Top Menu of 
+        the disc.
+
+    BDMV/MovieObject.bdmv
+        A Movie Object consists of an executable navigation command 
+        program (HDMV program).  Navigation commands in a Movie Object 
+        can launch PlayList playback or another Movie Object.
+
+    BDMV/CLIPINF/*.clpi
+        The Clip Information file stores the time stamps of the access point
+        into the corresponding AV stream file.
+
+    BDMV/PLAYLIST/*.mpls
+        A “Movie PlayList” is a collection of playing intervals in the Clips. 
+        One such playing interval is called a PlayItem and consists of an 
+        IN-point and an OUT-point, each of which refers to positions on a 
+        time axis of the Clip. Therefore a PlayList is a collection of 
+        PlayItems. Here the IN-point means a start point of a playing
+        interval, and the OUT-point means an end point of the playing interval.
+
+        The collection of mpls files defines the list of clips
+        on the disc.  Each mpls contains a list of m2ts files that compose
+        a title.  From this information we can get durations, audio and
+        video types, rates, languages, and chapter marks.
+
+        Below, I've broken out the fields that I know something about and
+        show some sample data for that field.
+
+Definitions:
+------------
+Pg == Presentation Graphics (perhaps subtitles?)
+Ig == Interactive Graphics
+
+Tables of values:
+-----------------
+VideoType
+    MPEG1 -    0x01
+    MPEG2 -    0x02
+    VC1   -    0xea
+    H264  -    0x1b
+
+AudioType
+    MPEG1        -    0x03
+    MPEG2        -    0x04
+    LPCM         -    0x80
+    AC3          -    0x81
+    DTS          -    0x82
+    TRUEHD       -    0x83
+    AC3+         -    0x84
+    DTSHD        -    0x85
+    DTSHD Master -    0x86
+
+OtherType
+    Presentation graphics   0x90
+    Interactive graphics    0x91
+    Text Subtitle           0x92
+
+VideoFormat
+    Reserved    -    0
+    i480        -    1
+    i576        -    2
+    p480        -    3
+    i1080       -    4
+    p720        -    5
+    p1080       -    6
+    p576        -    7
+
+FrameRate
+    Reserved    -    0
+    23.976      -    1
+    24          -    2
+    25          -    3
+    29.97       -    4
+    50          -    6
+    59.94       -    7
+
+AspectRatio
+    Reserved    -    0
+    4:3         -    2
+    16:9        -    3
+
+AudioPresentation
+    Reserved    -   0
+    mono        -   1
+    dual mono   -   2
+    stereo      -   3
+    multi       -   6
+    combo       -   12
+
+SampleRate
+    Reserved    -    0
+    48          -    1
+    96          -    4
+    192         -    5
+    48/192      -    12
+    48/96       -    14
+
+CharacterCode
+    Reserved    -   0x00
+    UTF8        -   0x01
+    UTF16       -   0x02
+    Shift JIS (Japanese)    -   0x03
+    KSC 5601-1987 (Korean)  -   0x04
+    GB18030-200 (Chinese)   -   0x05
+    GB2312 (Chinese)        -   0x06
+    BIG5 (Chinese)          -   0x07
+
+
+MPLS Format & sample data
+-------------------------
+        UO_mask_table()
+        {
+            chapter_search_mask -               1 bit
+            time_search_mask -                  1 bit
+            skip_to_next_point_mask -           1 bit
+            skip_back_to_previous_point_mask -  1 bit
+            forward_play_mask -                 1 bit
+            backward_play_mask -                1 bit
+            play_mask
+            stop_mask
+            pause_on_mask
+            pause_off_mask
+            still_off_mask
+            resume_mask
+            move_up_selected_button_mask
+            move_down_selected_button_mask
+            move_left_selected_button_mask
+            move_right_selected_button_mask
+            select_button_mask
+            activate_and_activate_mask
+            select_and_activate_mask
+            audio_change_mask
+            PG_textST_change_mask
+            angle_change_mask
+            popup_on_mask
+            popup_off_mask
+            select_menu_language_mask
+        }
+        These flags mask user actions.  They impose restrictions on operations
+        performed in response to user actions.
+
+        I haven't found very good information on this.
+        Different patent applications list different fields.
+        I'm not at all sure that the this list is accurate, complete
+        or in the right order.
+        
+        The space it occupies is 8 bytes.
+
+        stream_entry()
+        {
+            length -            1 byte
+            type -              1 byte
+                0 Resrved
+                1 elemtary strem of the clip used by the PlayItem
+                2 elemtary stream of the clip used by a SubPath of the
+                  PlayItem
+                3 ?
+                4 ?
+            if (type == 1)
+            {
+                PID -           2 bytes
+                reserved -      6 bytes
+            }
+            else if (type == 2 || type == 4)
+            {
+                subpath_id -    1 byte
+                subclip_id -    1 byte
+                PID -           2 bytes
+                reserved        4 bytes
+            }
+            else if (type == 3)
+            {
+                subpath_id -    1 byte
+                PID -           2 bytes
+                reserved        5 bytes
+            }
+        }
+
+        stream_attributes()
+        {
+            length
+            stream_coding_type
+            if (stream_coding_type == 0x01 ||
+                stream_coding_type == 0x02 ||
+                stream_coding_type == 0xea ||
+                stream_coding_type == 0x1b)
+            {
+                format -    6 (4 bits)
+                framerate - 1 (4 bits)
+                reserved -  3 bytes
+            }
+            else if (stream_coding_type == 0x03 ||
+                     stream_coding_type == 0x04 ||
+                     stream_coding_type == 0x80 ||
+                     stream_coding_type == 0x81 ||
+                     stream_coding_type == 0x82 ||
+                     stream_coding_type == 0x83 ||
+                     stream_coding_type == 0x84 ||
+                     stream_coding_type == 0x85 ||
+                     stream_coding_type == 0x86)
+            {
+                presentation_type -     6 (4 bits)
+                samplerate-             1 (4 bits)
+                audio lang code -       3 bytes 65 6e 67 
+            }
+            else if (stream_coding_type == 0x90)
+            {
+                pg lang code - 3 bytes 65 6e 67 
+            }
+            else if (stream_coding_type == 0x91)
+            {
+                ig lang code - 3 bytes 65 6e 67 
+            }
+            else if (stream_coding_type == 0x92)
+            {
+                character_code     1 byte
+                textST lang code - 3 bytes 65 6e 67 
+            }
+        }
+
+MPLS
+type_indicator                  4 bytes  4d 50 4c 53    ("MPLS")
+type_indicator2                 4 bytes  30 32 30 30    ("0200")
+playlist_start_address -        4 bytes  00 00 00 3a
+    Position of PlayList, from beginning of file
+
+playlist_mark_start_address     4 bytes 00 00 17 1c
+    Position of PlayListMark, from beginning of file
+
+extension_data_start_address    4 bytes
+
+reserved                        20 bytes
+
+AppInfoPlayList
+    length -                    4 bytes 00 00 00 0e
+    reserved -                  1 byte  00
+    playlist_playback_type      1 byte  01
+    if playlist_playback_type == 2 || playlist_playback_type == 3)
+    {
+        playback_count          2 bytes
+    }
+    else
+    {
+        reserved                2 bytes 00 00
+    }
+    UO_mask_table()             8 bytes 00 04 01 0f 40 00 00 00
+        This is documented (incompletely) above
+
+    playlist_random_access_flag     1 bit   0
+    audio_mix_app_flag              1 bit   1
+    lossless_may_bypass_mixer_flag  1 bit   0
+    reserved                        13 bits 0
+
+PlayList
+    len -                       00 00 16 de 
+        Length in bytes of PlayList
+
+    reserved -                  2 bytes
+
+    number_of_playitems -       2 bytes
+        Number of PlayItems
+
+    number_of_subpaths -        2 bytes
+
+    PlayItem
+        len -                   00 b0 
+            length of this PlayItem in bytes
+
+        clip file -             5 bytes 30 30  30 32 37 
+            m2ts/clip file for this segment
+
+        clip codec id -         4 bytes 4d 32 54 53 
+            should always be "M2TS"
+
+        Reserved 11 bits -     00
+
+        is_multi_angle -       1
+        (1 bit)
+            1 if this PlayItem has multiple angles
+
+        connection_condition-   01
+        (4 bits)
+            The field "ConnectionCondition" has a data length of 4 bits
+            and indicates information on a state of connection between clips. 
+            A value of the field "ConnectionCondition" used for a 
+            recording-specific recording medium is "1", "5" or "6". If the 
+            field "ConnectionCondition" has the value "1", this indicates 
+            that the clip referred to by the PlayItem has no seamless 
+            connection to a clip referred to by a closest past PlayItem. If 
+            the field "ConnectionCondition" has the value "5" or "6", this 
+            indicates that the clip referred to by the PlayItem has seamless 
+            connection to the clip referred to by the closest past PlayItem. 
+            The "seamless connection" means that inter-clip reproduction 
+            control is performed so as to reproduce a clip and a next clip at 
+            continuous frame timings.
+
+        stc_id -            00 
+
+        in_time -           00 07 ff f8 
+            start time in 45khz ticks
+
+        out_time -          00 2d cd 9b 
+            end time in 45khz ticks
+
+        UO_mask_table() -   8 bytes
+
+        random_access_flag  1 bit
+            0 permits jump reporduction and variable speed
+            1 prohibits jump reporduction and variable speed
+
+        reserved
+        (7 bits)
+
+        still mode -        00
+            00 No still
+            01 Still for limited time period described by still_time
+            02 Still for unlimited period.  Continue till canceled by user.
+        if (still mode == 1)
+        {
+            still_time -     00 00
+        }
+        else
+        {
+            reserved -      00 00
+        }
+
+        if (is_multi_angle == 1)
+        {
+            num angles -    03
+            reserved -      0
+            (6 bits)
+            is_different_audios -   0
+            (1 bit)
+            is_seamless_angle_change -  0
+            (1 bit)
+            for (ii=1; ii< num_angles; ii++)
+            {
+                clip_file -         5 chars
+                    m2ts/clip file for this segment
+
+                clip_codec_id -     4 chars
+                    Shoule always be "M2TS"
+
+                stc_id              1 byte
+            }
+        }
+
+        stn_table
+            length -        2 bytes 00 8e  
+            reserved -      2 bytes 00 00 
+            num_primary_video -     1 byte 01 
+            num_primary_audio -     1 byte 04 
+            num_pg -                1 byte 03 
+            num_ig -                1 byte 00
+            num_secondary_audio -   1 byte 00
+            num_secondary_video -   1 byte 00
+            num_PIP_PG -            1 byte 00
+
+            reserved -              5 bytes 00 00 00 00 00 
+
+            for (ii = 0; ii < num_primary_video; ii++)
+            {
+                VideoEntry
+                stream_entry()
+                stream_attributes()
+            }
+
+            for (ii = 0; ii < num_primary_audio; ii++)
+            {
+                AudioEntry
+                stream_entry()
+                stream_attributes()
+            }
+
+            for (ii = 0; ii < num_pg; ii++)
+            {
+                PgEntry
+                stream_entry()
+                stream_attributes()
+            }
+
+            for (ii = 0; ii < num_ig; ii++)
+            {
+                IgEntry
+                stream_entry()
+                stream_attributes()
+            }
+
+            for (ii = 0; ii < num_secondary_audio; ii++)
+            {
+                SecondaryAudioEntry
+                stream_entry()
+                stream_attributes()
+                combo_info_secondary_video_secondary_audio()
+                {
+                    number_of_secondary_audio_ref_entries   1 byte
+                    reserve_for_word_align                  1 byte
+                    for (ii = 0; ii < number_of_secondary_audio_ref_entries;
+                        ii++)
+                    {
+                        secondary_audio_stream_id_ref       1 byte
+                    }
+                    if (number_of_secondary_audio_ref_entries & 0x01)
+                    {
+                        reserved_for_word_align             1 byte
+                    }
+                }
+            }
+
+            for (ii = 0; ii < num_secondary_video; ii++)
+            {
+                SecondaryAudioEntry
+                stream_entry()
+                stream_attributes()
+                combo_info_secondary_audio_primary_audio()
+                {
+                    number_of_primary_audio_ref_entries     1 byte
+                    reserve_for_word_align                  1 byte
+                    for (ii = 0; ii < number_of_primary_audio_ref_entries;
+                        ii++)
+                    {
+                        primary_audio_stream_id_ref         1 byte
+                    }
+                    if (number_of_primary_audio_ref_entries & 0x01)
+                    {
+                        reserved_for_word_align             1 byte
+                    }
+                }
+                combo_info_secondary_pip_pg_textST()
+                {
+                    number_of_pip_pg_textST_ref_entries
+                    reserved_for_word_align
+                    for (ii = 0; ii < number_of_pip_pg_textST_ref_entries;
+                         ii++)
+                    {
+                        pip_pg_textST_stream_id_ref
+                    }
+                    if (number_of_pip_pg_textST_ref_entries & 0x01)
+                    {
+                        reserved_for_word_align
+                    }
+                }
+            }
+
+            VideoAttr
+                byte -      05 
+                type -      1b
+                format -    6 (4 bits)
+                framerate - 1 (4 bits)
+                3 zeros -   00 00 00 
+
+            AudioEntry (repeated Num audio times)
+                2 bytes -   09 01  
+                PID -       11 00 
+                6 zeros -   00 00 00 00 00 00
+
+            AudioAttr
+                byte -      05 
+                type -      80 
+                format -    6 (4 bits)
+                samplerate- 1 (4 bits)
+                lang code - 65 6e 67 
+            etc...
+
+            PgEntry (repeated Num Pg times)
+                2 bytes -   09 01
+                PID -       12 00
+                6 zeros -   00 00 00 00 00 00
+
+            PgAttr
+                byte -      05
+                type? -     90
+                lang code - 65 6e 67 
+                byte -      00 
+            etc...
+
+    SubPath
+        length                  4 bytes
+        reserved                1 byte
+        subPath_type            1 byte
+            0       reserved
+            1       reserved   
+            2       Audio presentation path of browsable slideshow
+                        not synchronized
+            3       Interactive graphics presentation menu
+                        not synchronized
+            4       Text subtitle presentation path
+                        is synchronized
+            5       2nd Audio presentation path
+                        separate clip from playitem
+                        is synchronized
+            6       2nd Video Presentation path
+                        separate clip from playitem
+                        not synchronized
+            7       Picture-in-picture presentation path
+                        same clip as playitem
+                        is synchronized
+            7-255   reserved
+
+        reserved                15 bits
+        is_repeat_subPath       1 bit
+        reserved                1 byte
+        number_of_subPlayItems  1 byte
+        SubPlayItem
+            length              2 bytes
+            clip_file           5 bytes
+            codec_id            4 bytes
+            reserved            7 bits
+            is_repeat_flag      1 bit
+            SubPlayItem_type    1 byte
+            ref_to_STC_id       1 byte
+            in_time             4 bytes
+            out_time            4 bytes
+            if (is_repeat_flag)
+                sync_PlayItem_id            2 bytes
+                sync_start_PTS_of_PlayItem  4 bytes
+            else
+                reserved                    6 bytes
+        SubPlayItem 2
+            length              2 bytes
+            clip_file           5 bytes
+            codec_id            4 bytes
+            reserved            31 bits
+            is_multi_clip_entries 1 bit
+            ref_to_STC_id       1 byte
+            in_time             4 bytes
+            out_time            4 bytes
+            sync_PlayItem_id            2 bytes
+            sync_start_PTS_of_PlayItem  4 bytes
+            if (is_mult_clip_entries)
+                reserved                1 byte
+                num_of_clip_entries     1 byte
+                for each clip
+                    clip_file           5 bytes
+                    codec_id            4 bytes
+                    ref_to_STC_id       1 byte
+                    reserved            1 byte
+
+PlayListMark()
+{
+    Mark information associated
+    with the PlayList is stored. More specifically, information
+    associated with a mark indicating a jump destination
+    (jump point) of a jump such as a chapter jump specified
+    by a user operation or a command is stored in PlayList-
+    Mark( ). The mark is allowed to be set absolutely inde-
+    pendently of the range of PlayList or PlayItem
+
+    len -                   4 bytes       00 00 01 c2
+        number of bytes from position immediately after this field
+        to the end of PlayListMark()
+        length in bytes of play list marks
+
+    number_marks -          2 bytes       00 20 
+        Number of marks
+
+	for (ii = 0; ii < number_marks; ii++)
+	{
+        mark_id?            1 byte
+		mark_type			1 byte
+            00  Resume mark
+            01  Bookmark, indicates a playback entry point
+            02  Skip mark, indicates a skip point
+
+		play_item_ref		2 bytes
+            index of the PlayItem in which the mark exists
+
+		time				4 bytes
+            45Khz time tick from the in_time of the referenced PlayItem
+
+		entry_ES_PID		2 bytes
+		duration			4 bytes
+            Duration to skip when skip mark
+	}
+}
+
+    Mark
+        2 bytes -           00 01 
+            2 byte signature
+
+        playlist idx -      00 00 
+            playlist index of the m2ts this mark is in
+
+        time -              00 07 ff f8        (524280)
+            time in 45khz increments from start of m2ts
+
+        2 bytes -           ff ff 
+            seems to always be FF FF
+
+        4 zeros -           00 00 00 00
+            seems to always be zeors
+
+    etc...

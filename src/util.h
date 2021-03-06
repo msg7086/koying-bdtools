@@ -18,7 +18,9 @@
 #   define off_t off64_t
 #   undef  stat
 #   define stat  _stati64
+  #ifndef fstat
 #   define fstat _fstati64
+  #endif
 #   define wstat _wstati64
 #endif
 

@@ -100,124 +100,9 @@ _lookup_str(value_map_t *map, int val)
 }
 
 static void
-_show_stream(MPLS_STREAM *ss, int level)
+_show_marks(char *prefix, MPLS_PL *pl)
 {
-    str_t *lang;
-
-    indent_printf(level, "Codec (%04x): %s", ss->coding_type,
-                    _lookup_str(codec_map, ss->coding_type));
-    switch (ss->stream_type) {
-        case 1:
-            indent_printf(level, "PID: %04x", ss->pid);
-            break;
-
-        case 2:
-        case 4:
-            indent_printf(level, "SubPath Id: %02x", ss->subpath_id);
-            indent_printf(level, "SubClip Id: %02x", ss->subclip_id);
-            indent_printf(level, "PID: %04x", ss->pid);
-            break;
-
-        case 3:
-            indent_printf(level, "SubPath Id: %02x", ss->subpath_id);
-            indent_printf(level, "PID: %04x", ss->pid);
-            break;
-
-        default:
-            fprintf(stderr, "unrecognized stream type %02x\n", ss->stream_type);
-            break;
-    };
-
-    switch (ss->coding_type) {
-        case 0x01:
-        case 0x02:
-        case 0xea:
-        case 0x1b:
-            indent_printf(level, "Format %02x: %s", ss->format,
-                        _lookup_str(video_format_map, ss->format));
-            indent_printf(level, "Rate %02x: %s", ss->rate,
-                        _lookup_str(video_rate_map, ss->rate));
-            break;
-
-        case 0x03:
-        case 0x04:
-        case 0x80:
-        case 0x81:
-        case 0x82:
-        case 0x83:
-        case 0x84:
-        case 0x85:
-        case 0x86:
-            indent_printf(level, "Format %02x: %s", ss->format,
-                        _lookup_str(audio_format_map, ss->format));
-            indent_printf(level, "Rate %02x:", ss->rate,
-                        _lookup_str(audio_rate_map, ss->rate));
-            lang = str_substr((char*)ss->lang, 0, 3);
-            indent_printf(level, "Language: %s", lang->buf);
-            str_free(lang);
-            free(lang);
-            break;
-
-        case 0x90:
-        case 0x91:
-            lang = str_substr((char*)ss->lang, 0, 3);
-            indent_printf(level, "Language: %s", lang->buf);
-            str_free(lang);
-            free(lang);
-            break;
-
-        case 0x92:
-            indent_printf(level, "Char Code: %02x", ss->char_code);
-            lang = str_substr((char*)ss->lang, 0, 3);
-            indent_printf(level, "Language: %s", lang->buf);
-            str_free(lang);
-            free(lang);
-            break;
-
-        default:
-            fprintf(stderr, "unrecognized coding type %02x\n", ss->coding_type);
-            break;
-    };
-}
-
-static void
-_show_details(MPLS_PL *pl, int level)
-{
-    int ii, jj;
-
-    for (ii = 0; ii < pl->list_count; ii++) {
-        MPLS_PI *pi;
-        str_t *clip_id;
-
-        pi = &pl->play_item[ii];
-        clip_id = str_substr(pi->clip_id, 0, 5);
-        indent_printf(level, "Clip Id %s", clip_id->buf);
-        str_free(clip_id);
-        free(clip_id);
-        indent_printf(level+1, "Connection Condition: %02x", 
-                        pi->connection_condition);
-        indent_printf(level+1, "Stc Id: %02x", pi->stc_id);
-        indent_printf(level+1, "In-Time: %d", pi->in_time);
-        indent_printf(level+1, "Out-Time: %d", pi->out_time);
-        for (jj = 0; jj < pi->stn.num_video; jj++) {
-            indent_printf(level+1, "Video Stream %d:", jj);
-            _show_stream(&pi->stn.video[jj], level + 2);
-        }
-        for (jj = 0; jj < pi->stn.num_audio; jj++) {
-            indent_printf(level+1, "Audio Stream %d:", jj);
-            _show_stream(&pi->stn.audio[jj], level + 2);
-        }
-        for (jj = 0; jj < pi->stn.num_pg; jj++) {
-            indent_printf(level+1, "Presentation Graphics Stream %d:", jj);
-            _show_stream(&pi->stn.pg[jj], level + 2);
-        }
-        printf("\n");
-    }
-}
-
-static void
-_show_marks(char *prefix, MPLS_PL *pl, int level)
-{
+    int level = 0;
     int ii;
     char current_clip_id[6] = {0};
     int reset_timestamp = 0;
@@ -232,17 +117,16 @@ _show_marks(char *prefix, MPLS_PL *pl, int level)
         str_t *clip_id;
         int hour, min;
         double sec;
+        int p_hour, p_min;
+        double p_sec;
 
         plm = &pl->play_mark[ii];
         indent_printf(level, "PlayMark %d", ii);
-        indent_printf(level+1, "Type: %02x", plm->mark_type);
         if (plm->play_item_ref < pl->list_count) {
             pi = &pl->play_item[plm->play_item_ref];
             clip_id = str_substr(pi->clip_id, 0, 5);
             if(current_clip_id[0] == 0 || strncmp(clip_id->buf, current_clip_id, 5) != 0) {
-                // new file
                 strncpy(current_clip_id, clip_id->buf, 5);
-                printf("New file here\n");
                 reset_timestamp = 1;
             }
             indent_printf(level+1, "PlayItem: %s", clip_id->buf);
@@ -251,7 +135,6 @@ _show_marks(char *prefix, MPLS_PL *pl, int level)
         } else {
             indent_printf(level+1, "PlayItem: Invalid reference");
         }
-        indent_printf(level+1, "Time (ticks): %lu", plm->time);
 
         if (reset_timestamp) {
             if (fp)
@@ -259,7 +142,7 @@ _show_marks(char *prefix, MPLS_PL *pl, int level)
             if (*prefix) {
                 char filename[128];
                 strncpy(filename, prefix, 63);
-                sprintf(filename + strlen(filename), "_%05s_%02d.txt", current_clip_id, item_id);
+                sprintf(filename + strlen(filename), "_%02d_%sm2ts.txt", item_id, current_clip_id);
                 printf("Opening %s\n", filename);
                 fp = fopen(filename, "wb");
                 if (!fp) {
@@ -272,45 +155,19 @@ _show_marks(char *prefix, MPLS_PL *pl, int level)
             item_id++;
             chapter_id = 1;
         }
-        hour = plm->abs_start / (45000*60*60);
-        min = plm->abs_start / (45000*60) % 60;
-        sec = (double)(plm->abs_start % (45000 * 60)) / 45000;
-        indent_printf(level+1, "Abs Time (mm:ss.ms): %02d:%02d:%06.3f", hour, min, sec);
+
+        p_hour = plm->abs_start / (45000*60*60);
+        p_min = plm->abs_start / (45000*60) % 60;
+        p_sec = (double)(plm->abs_start % (45000 * 60)) / 45000;
 
         uint32_t abs_start = plm->abs_start - current_timestamp;
         hour = abs_start / (45000*60*60);
         min = abs_start / (45000*60) % 60;
         sec = (double)(abs_start % (45000 * 60)) / 45000;
-        indent_printf(level+1, "Abs Time (mm:ss.ms): %02d:%02d:%06.3f", hour, min, sec);
+        indent_printf(level+1, "Abs Time (mm:ss.ms): %02d:%02d:%06.3f (%02d:%02d:%06.3f)", p_hour, p_min, p_sec, hour, min, sec);
         printf("\n");
         fprintf(fp, "CHAPTER%02d=%02d:%02d:%06.3f\nCHAPTER%02dNAME=\n", chapter_id, hour, min, sec, chapter_id);
         chapter_id++;
-    }
-}
-
-static void
-_show_clip_list(MPLS_PL *pl, int level)
-{
-    int ii;
-
-    for (ii = 0; ii < pl->list_count; ii++) {
-        MPLS_PI *pi;
-        str_t *m2ts_file;
-
-        pi = &pl->play_item[ii];
-        m2ts_file = str_substr(pi->clip_id, 0, 5);
-        str_append(m2ts_file, ".m2ts");
-        if (verbose) {
-            uint32_t duration;
-
-            duration = pi->out_time - pi->in_time;
-            indent_printf(level, "%s -- Duration: %d:%02d", m2ts_file->buf,
-                        duration / (45000 * 60), (duration / 45000) % 60);
-        } else {
-            indent_printf(level, "%s", m2ts_file->buf);
-        }
-        str_free(m2ts_file);
-        free(m2ts_file);
     }
 }
 
@@ -416,7 +273,6 @@ _make_path(str_t *path, char *root, char *dir)
     }
 }
 
-static int clip_list = 0, playlist_info = 0, chapter_marks = 0;
 static int repeats = 0, seconds = 0, dups = 0;
 
 static MPLS_PL*
@@ -448,28 +304,7 @@ _process_file(char *prefix, char *name, MPLS_PL *pl_list[], int pl_count)
             return NULL;
         }
     }
-    if (verbose) {
-        indent_printf(0, 
-                    "%s -- Num Clips: %3d , Duration: minutes %4lu:%02lu", 
-                    basename(name),
-                    pl->list_count,
-                    pl->duration / (45000 * 60),
-                    (pl->duration / 45000) % 60);
-    } else {
-        indent_printf(0, "%s -- Duration: minutes %4lu:%02lu", 
-                    basename(name),
-                    pl->duration / (45000 * 60),
-                    (pl->duration / 45000) % 60);
-    }
-    if (playlist_info) {
-        _show_details(pl, 1);
-    }
-    if (chapter_marks) {
-        _show_marks(prefix, pl, 1);
-    }
-    if (clip_list) {
-        _show_clip_list(pl, 1);
-    }
+    _show_marks(prefix, pl);
     return pl;
 }
 
@@ -481,9 +316,6 @@ _usage(char *cmd)
 "With no options, produces a list of the playlist(s) with durations\n"
 "Options:\n"
 "    v             - Verbose output.\n"
-"    l             - Produces a list of the m2ts clips\n"
-"    i             - Dumps detailed information about each clip\n"
-"    c             - Show chapter marks\n"
 "    r <N>         - Filter out titles that have >N repeating clips\n"
 "    d             - Filter out duplicate titles\n"
 "    s <seconds>   - Filter out short titles\n"
@@ -494,7 +326,7 @@ _usage(char *cmd)
     exit(EXIT_FAILURE);
 }
 
-#define OPTS "vlicfr:ds:p:"
+#define OPTS "vfr:ds:p:"
 
 static int
 _qsort_str_cmp(const void *a, const void *b)
@@ -525,18 +357,6 @@ main(int argc, char *argv[])
 
             case 'v':
                 verbose = 1;
-                break;
-
-            case 'l':
-                clip_list = 1;
-                break;
-
-            case 'i':
-                playlist_info = 1;
-                break;
-
-            case 'c':
-                chapter_marks = 1;
                 break;
 
             case 'd':

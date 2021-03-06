@@ -1,8 +1,8 @@
-Tools to extract chapters from mpls file.
+Tool to extract chapters from mpls file.
 
 Usage:
 
-To extract all chapters from SHOW_DISC_01/BDMV/PLAYLIST into disc_*.txt
+To extract all chapters from SHOW_DISC_01/BDMV/PLAYLIST into disc1_*.txt
 
     mpls_dump -p disc1 SHOW_DISC_01
 

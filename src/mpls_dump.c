@@ -1,4 +1,3 @@
-#include "config.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -8,7 +7,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <libgen.h>
-#include "bdtools/mpls_parse.h"
+#include "mpls_parse.h"
 #include "util.h"
 
 static int verbose;

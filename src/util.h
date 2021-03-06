@@ -1,8 +1,6 @@
-//#include <stdio.h>
+#include <sys/types.h>
+#include <stdio.h>
 #include <stdint.h>
-//#include <stdlib.h>
-//#include <stdarg.h>
-//#include <string.h>
 
 #if defined( __MINGW32__ )
 #   undef  lseek
@@ -24,6 +22,8 @@
 #   define wstat _wstati64
 #endif
 
+#define X_FREE(X) { if (X) free(X); }
+
 typedef struct
 {
     char * buf;
@@ -40,4 +40,3 @@ void str_printf(str_t *str, const char *fmt, ...);
 void str_free(str_t *str);
 void hex_dump(uint8_t *buf, int count);
 void indent_printf(int level, char *fmt, ...);
-

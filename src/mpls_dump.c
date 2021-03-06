@@ -216,15 +216,21 @@ _show_details(MPLS_PL *pl, int level)
 }
 
 static void
-_show_marks(MPLS_PL *pl, int level)
+_show_marks(char *prefix, MPLS_PL *pl, int level)
 {
     int ii;
+    char current_clip_id[6] = {0};
+    int reset_timestamp = 0;
+    int current_timestamp = 0;
+    static int item_id = 1;
+    int chapter_id = 1;
+    FILE* fp = NULL;
 
     for (ii = 0; ii < pl->mark_count; ii++) {
         MPLS_PI *pi;
         MPLS_PLM *plm;
         str_t *clip_id;
-        int min;
+        int hour, min;
         double sec;
 
         plm = &pl->play_mark[ii];
@@ -233,6 +239,12 @@ _show_marks(MPLS_PL *pl, int level)
         if (plm->play_item_ref < pl->list_count) {
             pi = &pl->play_item[plm->play_item_ref];
             clip_id = str_substr(pi->clip_id, 0, 5);
+            if(current_clip_id[0] == 0 || strncmp(clip_id->buf, current_clip_id, 5) != 0) {
+                // new file
+                strncpy(current_clip_id, clip_id->buf, 5);
+                printf("New file here\n");
+                reset_timestamp = 1;
+            }
             indent_printf(level+1, "PlayItem: %s", clip_id->buf);
             str_free(clip_id);
             free(clip_id);
@@ -240,10 +252,39 @@ _show_marks(MPLS_PL *pl, int level)
             indent_printf(level+1, "PlayItem: Invalid reference");
         }
         indent_printf(level+1, "Time (ticks): %lu", plm->time);
-        min = plm->abs_start / (45000*60);
-        sec = (double)(plm->abs_start - min * 45000 * 60) / 45000;
-        indent_printf(level+1, "Abs Time (mm:ss.ms): %d:%.2f", min, sec);
+
+        if (reset_timestamp) {
+            if (fp)
+                fclose(fp);
+            if (*prefix) {
+                char filename[128];
+                strncpy(filename, prefix, 63);
+                sprintf(filename + strlen(filename), "_%05s_%02d.txt", current_clip_id, item_id);
+                printf("Opening %s\n", filename);
+                fp = fopen(filename, "wb");
+                if (!fp) {
+                    printf("ERROR: unable to open file %s\n", filename);
+                    return;
+                }
+            }
+            current_timestamp = plm->abs_start;
+            reset_timestamp = 0;
+            item_id++;
+            chapter_id = 1;
+        }
+        hour = plm->abs_start / (45000*60*60);
+        min = plm->abs_start / (45000*60) % 60;
+        sec = (double)(plm->abs_start % (45000 * 60)) / 45000;
+        indent_printf(level+1, "Abs Time (mm:ss.ms): %02d:%02d:%06.3f", hour, min, sec);
+
+        uint32_t abs_start = plm->abs_start - current_timestamp;
+        hour = abs_start / (45000*60*60);
+        min = abs_start / (45000*60) % 60;
+        sec = (double)(abs_start % (45000 * 60)) / 45000;
+        indent_printf(level+1, "Abs Time (mm:ss.ms): %02d:%02d:%06.3f", hour, min, sec);
         printf("\n");
+        fprintf(fp, "CHAPTER%02d=%02d:%02d:%06.3f\nCHAPTER%02dNAME=\n", chapter_id, hour, min, sec, chapter_id);
+        chapter_id++;
     }
 }
 
@@ -379,7 +420,7 @@ static int clip_list = 0, playlist_info = 0, chapter_marks = 0;
 static int repeats = 0, seconds = 0, dups = 0;
 
 static MPLS_PL*
-_process_file(char *name, MPLS_PL *pl_list[], int pl_count)
+_process_file(char *prefix, char *name, MPLS_PL *pl_list[], int pl_count)
 {
     MPLS_PL *pl;
 
@@ -424,7 +465,7 @@ _process_file(char *name, MPLS_PL *pl_list[], int pl_count)
         _show_details(pl, 1);
     }
     if (chapter_marks) {
-        _show_marks(pl, 1);
+        _show_marks(prefix, pl, 1);
     }
     if (clip_list) {
         _show_clip_list(pl, 1);
@@ -447,12 +488,13 @@ _usage(char *cmd)
 "    d             - Filter out duplicate titles\n"
 "    s <seconds>   - Filter out short titles\n"
 "    f             - Filter combination -r2 -d -s120\n"
+"    p <prefix>    - chapter output prefix (63 chars max)\n"
 , cmd);
 
     exit(EXIT_FAILURE);
 }
 
-#define OPTS "vlicfr:ds:"
+#define OPTS "vlicfr:ds:p:"
 
 static int
 _qsort_str_cmp(const void *a, const void *b)
@@ -473,6 +515,7 @@ main(int argc, char *argv[])
     struct stat st;
     str_t path = {0,};
     DIR *dir = NULL;
+    char prefix[64] = {0};
 
     do {
         opt = getopt(argc, argv, OPTS);
@@ -512,6 +555,10 @@ main(int argc, char *argv[])
 
             case 's':
                 seconds = atoi(optarg);
+                break;
+
+            case 'p':
+                strncpy(prefix, optarg, sizeof(prefix) - 1);
                 break;
 
             default:
@@ -565,7 +612,7 @@ main(int argc, char *argv[])
                     str_free(&name);
                     continue;
                 }
-                pl = _process_file(name.buf, pl_list, pl_ii);
+                pl = _process_file(prefix, name.buf, pl_list, pl_ii);
                 str_free(&name);
                 if (pl != NULL) {
                     pl_list[pl_ii++] = pl;
@@ -574,7 +621,7 @@ main(int argc, char *argv[])
             free(dirlist);
             str_free(&path);
         } else {
-            pl = _process_file(argv[ii], pl_list, pl_ii);
+            pl = _process_file(prefix, argv[ii], pl_list, pl_ii);
             if (pl != NULL) {
                 pl_list[pl_ii++] = pl;
             }

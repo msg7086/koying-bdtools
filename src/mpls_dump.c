@@ -168,6 +168,8 @@ _show_marks(char *prefix, MPLS_PL *pl)
         fprintf(fp, "CHAPTER%02d=%02d:%02d:%06.3f\nCHAPTER%02dNAME=\n", chapter_id, hour, min, sec, chapter_id);
         chapter_id++;
     }
+    if (fp)
+        fclose(fp);
 }
 
 static int

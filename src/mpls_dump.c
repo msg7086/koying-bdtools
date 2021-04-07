@@ -7,10 +7,13 @@
 #include <unistd.h>
 #include <string.h>
 #include <libgen.h>
+#include <math.h>
 #include "mpls_parse.h"
 #include "util.h"
 
 static int verbose;
+
+static int repeats = 0, seconds = 0, dups = 0, cut_seconds = 0;
 
 typedef struct {
     int value;
@@ -24,10 +27,29 @@ _show_marks(char *prefix, MPLS_PL *pl)
     int ii;
     char current_clip_id[6] = {0};
     int reset_timestamp = 0;
-    int current_timestamp = 0;
+    uint32_t current_timestamp = 0;
     static int item_id = 1;
     int chapter_id = 1;
     FILE* fp = NULL;
+
+    double fps = 24 / 1.001;
+    uint32_t fps30 = 0, fps24 = 0;
+
+    // guess FPS
+    for (ii = 0; ii < pl->mark_count; ii++) {
+        uint32_t time = pl->play_mark[ii].abs_start;
+        double time_f = time / 45000.0;
+        double frame_f_30 = time_f / 1.001 * 30.0;
+        double frame_f_24 = time_f / 1.001 * 24.0;
+        double diff_f_30 = fabs(frame_f_30 - round(frame_f_30));
+        double diff_f_24 = fabs(frame_f_24 - round(frame_f_24));
+        if (diff_f_30 < 1e-2) fps30++;
+        if (diff_f_24 < 1e-2) fps24++;
+    }
+
+    if (fps30 > fps24)
+        fps = 30 / 1.001;
+
 
     for (ii = 0; ii < pl->mark_count; ii++) {
         MPLS_PI *pi;
@@ -39,19 +61,25 @@ _show_marks(char *prefix, MPLS_PL *pl)
         double p_sec;
 
         plm = &pl->play_mark[ii];
-        indent_printf(level, "PlayMark %d", ii);
+        printf("PlayMark %2d:", ii);
         if (plm->play_item_ref < pl->list_count) {
             pi = &pl->play_item[plm->play_item_ref];
             clip_id = str_substr(pi->clip_id, 0, 5);
-            if(current_clip_id[0] == 0 || strncmp(clip_id->buf, current_clip_id, 5) != 0) {
+            if (current_clip_id[0] == 0 || strncmp(clip_id->buf, current_clip_id, 5) != 0) {
                 strncpy(current_clip_id, clip_id->buf, 5);
                 reset_timestamp = 1;
             }
-            indent_printf(level+1, "PlayItem: %s", clip_id->buf);
+            if (cut_seconds > 0) {
+                uint32_t rel_start_current = plm->abs_start - current_timestamp;
+                double sec = rel_start_current / 45000.0;
+                if (sec > cut_seconds)
+                    reset_timestamp = 1;
+            }
+            printf("PlayItem: %s\n", clip_id->buf);
             str_free(clip_id);
             free(clip_id);
         } else {
-            indent_printf(level+1, "PlayItem: Invalid reference");
+            printf("PlayItem: Invalid reference\n");
         }
 
         if (reset_timestamp) {
@@ -60,7 +88,7 @@ _show_marks(char *prefix, MPLS_PL *pl)
             if (*prefix) {
                 char filename[128];
                 strncpy(filename, prefix, 63);
-                sprintf(filename + strlen(filename), "_%02d_%sm2ts.txt", item_id, current_clip_id);
+                sprintf(filename + strlen(filename), "_%02d_%sm2ts_%0.0f.txt", item_id, current_clip_id, round(plm->abs_start * fps / 45000.0));
                 printf("Opening %s\n", filename);
                 fp = fopen(filename, "wb");
                 if (!fp) {
@@ -78,12 +106,11 @@ _show_marks(char *prefix, MPLS_PL *pl)
         p_min = plm->abs_start / (45000*60) % 60;
         p_sec = (double)(plm->abs_start % (45000 * 60)) / 45000;
 
-        uint32_t abs_start = plm->abs_start - current_timestamp;
-        hour = abs_start / (45000*60*60);
-        min = abs_start / (45000*60) % 60;
-        sec = (double)(abs_start % (45000 * 60)) / 45000;
+        uint32_t rel_start = plm->abs_start - current_timestamp;
+        hour = rel_start / (45000*60*60);
+        min = rel_start / (45000*60) % 60;
+        sec = (double)(rel_start % (45000 * 60)) / 45000;
         indent_printf(level+1, "Abs Time (mm:ss.ms): %02d:%02d:%06.3f (%02d:%02d:%06.3f)", p_hour, p_min, p_sec, hour, min, sec);
-        printf("\n");
         if (fp)
             fprintf(fp, "CHAPTER%02d=%02d:%02d:%06.3f\nCHAPTER%02dNAME=\n", chapter_id, hour, min, sec, chapter_id);
         chapter_id++;
@@ -194,8 +221,6 @@ _make_path(str_t *path, char *root, char *dir)
     }
 }
 
-static int repeats = 0, seconds = 0, dups = 0;
-
 static MPLS_PL*
 _process_file(char *prefix, char *name, MPLS_PL *pl_list[], int pl_count)
 {
@@ -241,13 +266,15 @@ _usage(char *cmd)
 "    d             - Filter out duplicate titles\n"
 "    s <seconds>   - Filter out short titles\n"
 "    f             - Filter combination -r2 -d -s120\n"
+"\n"
 "    p <prefix>    - chapter output prefix (63 chars max)\n"
+"    c <seconds>   - split chapters at first segment after <seconds>\n"
 , cmd);
 
     exit(EXIT_FAILURE);
 }
 
-#define OPTS "vfr:ds:p:"
+#define OPTS "vfr:ds:p:c:"
 
 static int
 _qsort_str_cmp(const void *a, const void *b)
@@ -300,6 +327,10 @@ main(int argc, char *argv[])
 
             case 'p':
                 strncpy(prefix, optarg, sizeof(prefix) - 1);
+                break;
+
+            case 'c':
+                cut_seconds = atoi(optarg);
                 break;
 
             default:

@@ -13,7 +13,8 @@
 
 static int verbose;
 
-static int repeats = 0, seconds = 0, dups = 0, cut_seconds = 0;
+static int repeats = 0, seconds = 0, dups = 0;
+static double cut_seconds = -1.0;
 
 typedef struct {
     int value;
@@ -69,7 +70,7 @@ _show_marks(char *prefix, MPLS_PL *pl)
                 strncpy(current_clip_id, clip_id->buf, 5);
                 reset_timestamp = 1;
             }
-            if (cut_seconds > 0) {
+            if (cut_seconds > 0.0) {
                 uint32_t rel_start_current = plm->abs_start - current_timestamp;
                 double sec = rel_start_current / 45000.0;
                 if (sec > cut_seconds)
@@ -330,7 +331,7 @@ main(int argc, char *argv[])
                 break;
 
             case 'c':
-                cut_seconds = atoi(optarg);
+                cut_seconds = atof(optarg);
                 break;
 
             default:

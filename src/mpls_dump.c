@@ -13,7 +13,7 @@
 
 static int verbose;
 
-static int repeats = 0, seconds = 0, dups = 0;
+static int repeats = 0, seconds = 0, dups = 0, cut_at_new_file = 0;
 static double cut_seconds = -1.0;
 
 typedef struct {
@@ -66,7 +66,7 @@ _show_marks(char *prefix, MPLS_PL *pl)
         if (plm->play_item_ref < pl->list_count) {
             pi = &pl->play_item[plm->play_item_ref];
             clip_id = str_substr(pi->clip_id, 0, 5);
-            if (current_clip_id[0] == 0 || strncmp(clip_id->buf, current_clip_id, 5) != 0) {
+            if (current_clip_id[0] == 0 || (cut_at_new_file && strncmp(clip_id->buf, current_clip_id, 5) != 0)) {
                 strncpy(current_clip_id, clip_id->buf, 5);
                 reset_timestamp = 1;
             }
@@ -269,13 +269,14 @@ _usage(char *cmd)
 "    f             - Filter combination -r2 -d -s120\n"
 "\n"
 "    p <prefix>    - chapter output prefix (63 chars max)\n"
+"    e             - split chapters at new file\n"
 "    c <seconds>   - split chapters at first segment after <seconds>\n"
 , cmd);
 
     exit(EXIT_FAILURE);
 }
 
-#define OPTS "vfr:ds:p:c:"
+#define OPTS "vfr:ds:p:ec:"
 
 static int
 _qsort_str_cmp(const void *a, const void *b)
@@ -328,6 +329,10 @@ main(int argc, char *argv[])
 
             case 'p':
                 strncpy(prefix, optarg, sizeof(prefix) - 1);
+                break;
+
+            case 'e':
+                cut_at_new_file = 1;
                 break;
 
             case 'c':

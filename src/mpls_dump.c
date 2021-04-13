@@ -15,6 +15,7 @@ static int verbose;
 
 static int repeats = 0, seconds = 0, dups = 0, cut_at_new_file = 0;
 static double cut_seconds = -1.0;
+static char included_files[4096] = {0};
 
 typedef struct {
     int value;
@@ -27,6 +28,7 @@ _show_marks(char *prefix, MPLS_PL *pl)
     int level = 0;
     int ii;
     char current_clip_id[6] = {0};
+    char temp_clip_id[8] = {',', 0, 0, 0, 0, 0, ',', 0};
     int reset_timestamp = 0;
     uint32_t current_timestamp = 0;
     static int item_id = 1;
@@ -62,10 +64,20 @@ _show_marks(char *prefix, MPLS_PL *pl)
         double p_sec;
 
         plm = &pl->play_mark[ii];
-        printf("PlayMark %2d:", ii);
+        printf("PlayMark %2d: ", ii);
         if (plm->play_item_ref < pl->list_count) {
             pi = &pl->play_item[plm->play_item_ref];
             clip_id = str_substr(pi->clip_id, 0, 5);
+
+            if (included_files[0]) {
+                // Filter clip id
+                strncpy(temp_clip_id + 1, pi->clip_id, 5);
+                if (strstr(included_files, temp_clip_id) == NULL) {
+                    printf("Skipped: %s\n", clip_id->buf);
+                    continue;
+                }
+            }
+
             if (current_clip_id[0] == 0 || (cut_at_new_file && strncmp(clip_id->buf, current_clip_id, 5) != 0)) {
                 strncpy(current_clip_id, clip_id->buf, 5);
                 reset_timestamp = 1;
@@ -271,12 +283,13 @@ _usage(char *cmd)
 "    p <prefix>    - chapter output prefix (63 chars max)\n"
 "    e             - split chapters at new file\n"
 "    c <seconds>   - split chapters at first segment after <seconds>\n"
+"    i <files>     - only include files (ex: -i 00001,00002,00005)\n"
 , cmd);
 
     exit(EXIT_FAILURE);
 }
 
-#define OPTS "vfr:ds:p:ec:"
+#define OPTS "vfr:ds:p:ec:i:"
 
 static int
 _qsort_str_cmp(const void *a, const void *b)
@@ -337,6 +350,12 @@ main(int argc, char *argv[])
 
             case 'c':
                 cut_seconds = atof(optarg);
+                break;
+
+            case 'i':
+                strncpy(included_files + 1, optarg, sizeof(included_files) - 2);
+                included_files[0] = ',';
+                included_files[strlen(included_files)] = ',';
                 break;
 
             default:

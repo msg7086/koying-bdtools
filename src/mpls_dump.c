@@ -82,11 +82,11 @@ _show_marks(char *prefix, MPLS_PL *pl)
 
             int new_file = cut_at_new_file && strncmp(clip_id->buf, current_clip_id, 5) != 0;
             if (current_clip_id[0] == 0 || new_file) {
-                strncpy(current_clip_id, clip_id->buf, 5);
                 reset_timestamp = 1;
                 if (new_file)
                     reset_file_timestamp = 1;
             }
+            strncpy(current_clip_id, clip_id->buf, 5);
             if (cut_seconds > 0.0) {
                 uint32_t rel_start_current = plm->abs_start - current_timestamp;
                 double sec = rel_start_current / 45000.0;

@@ -30,7 +30,9 @@ _show_marks(char *prefix, MPLS_PL *pl)
     char current_clip_id[6] = {0};
     char temp_clip_id[8] = {',', 0, 0, 0, 0, 0, ',', 0};
     int reset_timestamp = 0;
+    int reset_file_timestamp = 0;
     uint32_t current_timestamp = 0;
+    uint32_t current_file_timestamp = 0;
     static int item_id = 1;
     int chapter_id = 1;
     FILE* fp = NULL;
@@ -78,9 +80,12 @@ _show_marks(char *prefix, MPLS_PL *pl)
                 }
             }
 
-            if (current_clip_id[0] == 0 || (cut_at_new_file && strncmp(clip_id->buf, current_clip_id, 5) != 0)) {
+            int new_file = cut_at_new_file && strncmp(clip_id->buf, current_clip_id, 5) != 0;
+            if (current_clip_id[0] == 0 || new_file) {
                 strncpy(current_clip_id, clip_id->buf, 5);
                 reset_timestamp = 1;
+                if (new_file)
+                    reset_file_timestamp = 1;
             }
             if (cut_seconds > 0.0) {
                 uint32_t rel_start_current = plm->abs_start - current_timestamp;
@@ -95,13 +100,18 @@ _show_marks(char *prefix, MPLS_PL *pl)
             printf("PlayItem: Invalid reference\n");
         }
 
+        if (reset_file_timestamp) {
+            current_file_timestamp = plm->abs_start;
+            reset_file_timestamp = 0;
+        }
+
         if (reset_timestamp) {
             if (fp)
                 fclose(fp);
             if (*prefix) {
                 char filename[128];
                 strncpy(filename, prefix, 63);
-                sprintf(filename + strlen(filename), "_%02d_%sm2ts_%0.0f.txt", item_id, current_clip_id, round(plm->abs_start * fps / 45000.0));
+                sprintf(filename + strlen(filename), "_%02d_%sm2ts_%0.0f.txt", item_id, current_clip_id, round((plm->abs_start - current_file_timestamp) * fps / 45000.0));
                 printf("Opening %s\n", filename);
                 fp = fopen(filename, "wb");
                 if (!fp) {

@@ -137,7 +137,7 @@ _show_marks(char *prefix, MPLS_PL *pl)
         hour = rel_start / (45000*60*60);
         min = rel_start / (45000*60) % 60;
         sec = (double)(rel_start % (45000 * 60)) / 45000;
-        indent_printf(level+1, "Abs Time (mm:ss.ms): %02d:%02d:%06.3f (%02d:%02d:%06.3f)", p_hour, p_min, p_sec, hour, min, sec);
+        indent_printf(level+1, "Abs Time (mm:ss.ms): %02d:%02d:%06.3f (%02d:%02d:%06.3f) [%0.0f]", p_hour, p_min, p_sec, hour, min, sec, round(rel_start * fps / 45000.0));
         if (fp)
             fprintf(fp, "CHAPTER%02d=%02d:%02d:%06.3f\nCHAPTER%02dNAME=\n", chapter_id, hour, min, sec, chapter_id);
         chapter_id++;

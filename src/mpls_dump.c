@@ -14,7 +14,8 @@
 static int verbose;
 
 static int repeats = 0, seconds = 0, dups = 0, cut_at_new_file = 0;
-static double cut_seconds = -1.0;
+static double cut_seconds[4096];
+static int cut_seconds_idx = 0;
 static char included_files[4096] = {0};
 
 typedef struct {
@@ -87,11 +88,14 @@ _show_marks(char *prefix, MPLS_PL *pl)
                     reset_file_timestamp = 1;
             }
             strncpy(current_clip_id, clip_id->buf, 5);
-            if (cut_seconds > 0.0) {
+            if (cut_seconds[cut_seconds_idx] > 0.0) {
                 uint32_t rel_start_current = plm->abs_start - current_timestamp;
                 double sec = rel_start_current / 45000.0;
-                if (sec > cut_seconds)
+                if (sec > cut_seconds[cut_seconds_idx]) {
                     reset_timestamp = 1;
+                    if (cut_seconds[cut_seconds_idx+1] > 0.0)
+                        cut_seconds_idx++;
+                }
             }
             printf("PlayItem: %s\n", clip_id->buf);
             str_free(clip_id);
@@ -293,6 +297,7 @@ _usage(char *cmd)
 "    p <prefix>    - chapter output prefix (63 chars max)\n"
 "    e             - split chapters at new file\n"
 "    c <seconds>   - split chapters at first segment after <seconds>\n"
+"                    * can be repeated for multiple cuts\n"
 "    i <files>     - only include files (ex: -i 00001,00002,00005)\n"
 , cmd);
 
@@ -321,6 +326,11 @@ main(int argc, char *argv[])
     str_t path = {0,};
     DIR *dir = NULL;
     char prefix[64] = {0};
+
+    for (size_t i = 0; i < sizeof(cut_seconds) / sizeof(cut_seconds[0]); i++)
+    {
+        cut_seconds[i] = -1.0;
+    }
 
     do {
         opt = getopt(argc, argv, OPTS);
@@ -359,7 +369,7 @@ main(int argc, char *argv[])
                 break;
 
             case 'c':
-                cut_seconds = atof(optarg);
+                cut_seconds[cut_seconds_idx++] = atof(optarg);
                 break;
 
             case 'i':
@@ -377,6 +387,8 @@ main(int argc, char *argv[])
     if (optind >= argc) {
         _usage(argv[0]);
     }
+
+    cut_seconds_idx = 0;
 
     for (pl_ii = 0, ii = optind; pl_ii < 1000 && ii < argc; ii++) {
         if (stat(argv[ii], &st)) {
